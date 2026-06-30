@@ -1,20 +1,4 @@
-"""
-Device Monitor Panel v10
-========================
-Fixes & additions:
-  1. Uptime: use 'net stats srv' cmd (locale-independent, no PS needed)
-  2. Jetson Orin NX full support:
-       - GPU utilisation % (tegrastats GR3D_FREQ)
-       - GPU power (mW)
-       - Per-core CPU loads
-       - Unified memory (RAM used/total)
-       - All thermal zones (CPU, GPU, SOC, board, etc.)
-       - eMMC / NVMe disk usage
-       - VDD (power rails) monitoring
-  3. Extra Jetson pie: GPU utilisation
-  4. Jetson temperature table
-  5. Windows uptime fixed (net stats workstation, no locale issues)
-"""
+
 import re, time
 from datetime import datetime
 from PyQt5.QtWidgets import (
@@ -72,9 +56,7 @@ PIE_RX   = "#7C3AED"
 PIE_TX   = "#0EA5E9"
 PIE_BG   = "#EDE9FE"
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Pie Chart Widget — pure QPainter, zero external dependencies
-# ─────────────────────────────────────────────────────────────────────────────
 class PieChart(QWidget):
     MODE_SINGLE = "single"
     MODE_NET    = "net"
@@ -157,9 +139,7 @@ class PieChart(QWidget):
         p.end()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # SSH helper
-# ─────────────────────────────────────────────────────────────────────────────
 def _run(ssh, cmd: str, timeout: int = 15) -> str:
     try:
         _, out, _ = ssh.exec_command(cmd, timeout=timeout)
@@ -198,7 +178,7 @@ def _win_collect(ssh) -> dict:
         except Exception:
             pass
 
-    # ── RAM via systeminfo ────────────────────────────────────────────────
+    #  RAM via systeminfo 
     raw_si = _run(ssh, "systeminfo", timeout=20)
     tm = re.search(r"Total Physical Memory[:\s]+([\d\.,]+)\s*MB", raw_si, re.I)
     am = re.search(r"Available Physical Memory[:\s]+([\d\.,]+)\s*MB", raw_si, re.I)
@@ -210,7 +190,7 @@ def _win_collect(ssh) -> dict:
         except Exception:
             pass
 
-    # ── Uptime via 'net statistics workstation' (reliable, no PS needed) ────
+    # Uptime via 'net statistics workstation' (reliable, no PS needed) 
     # Always contains: "Statistics since M/D/YYYY H:MM:SS AM/PM"
     raw_nw = _run(ssh, "net statistics workstation", timeout=10)
     bm = re.search(r"since\s+(.+)", raw_nw, re.I)
@@ -254,7 +234,7 @@ def _win_collect(ssh) -> dict:
         except Exception:
             pass
 
-    # ── Processes: tasklist for mem + two PS snapshots for CPU ───────────
+    # Processes: tasklist for mem + two PS snapshots for CPU 
     raw_tl = _run(ssh, "tasklist /fo csv /nh", timeout=12)
     proc_mem = {}
     for line in raw_tl.splitlines():
@@ -300,7 +280,7 @@ def _win_collect(ssh) -> dict:
             "pid": pid, "name": name[:24],
             "cpu": f"{cpu_v:.2f}", "mem": f"{mem_kb//1024} MB"})
 
-    # ── Network: ipconfig IPs + netstat bytes ────────────────────────────
+    # Network: ipconfig IPs + netstat bytes
     raw_ip = _run(ssh, "ipconfig", timeout=8)
     iface = None
     for line in raw_ip.splitlines():
@@ -326,7 +306,7 @@ def _win_collect(ssh) -> dict:
     return d
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+#
 # Linux / Jetson Orin NX collector
 # ─────────────────────────────────────────────────────────────────────────────
 def _parse_tegrastats(line: str) -> dict:
@@ -374,7 +354,7 @@ def _linux_collect(ssh) -> dict:
         "temps": [],
     }
 
-    # ── CPU — two /proc/stat snapshots ───────────────────────────────────
+    # ── CPU — two /proc/stat snapshots
     raw1 = _run(ssh, "cat /proc/stat | head -1")
     time.sleep(0.5)
     raw2 = _run(ssh, "cat /proc/stat | head -1")
@@ -386,7 +366,7 @@ def _linux_collect(ssh) -> dict:
     except Exception:
         pass
 
-    # ── RAM ──────────────────────────────────────────────────────────────
+    #─ RAM
     raw = _run(ssh,
         "awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}"
         "END{printf \"%d %d\",t/1024,(t-a)/1024}' /proc/meminfo")
@@ -397,7 +377,7 @@ def _linux_collect(ssh) -> dict:
         except Exception:
             pass
 
-    # ── Swap ─────────────────────────────────────────────────────────────
+    # ── Swap
     raw = _run(ssh,
         "awk '/SwapTotal/{t=$2}/SwapFree/{f=$2}"
         "END{printf \"%d %d\",t/1024,(t-f)/1024}' /proc/meminfo")
@@ -408,7 +388,7 @@ def _linux_collect(ssh) -> dict:
         except Exception:
             pass
 
-    # ── Disk / ───────────────────────────────────────────────────────────
+    # ── Disk 
     raw = _run(ssh, "df -h / | awk 'NR==2{print $2,$3,$4,$5}'")
     parts = raw.split()
     if len(parts) >= 4:
@@ -428,7 +408,7 @@ def _linux_collect(ssh) -> dict:
     if len(parts) >= 3:
         d["load"] = " / ".join(parts[:3])
 
-    # ── Processes ────────────────────────────────────────────────────────
+    # ── Processes 
     raw = _run(ssh, "ps -eo pid,comm,%cpu,%mem --sort=-%cpu 2>/dev/null | head -11")
     for line in raw.splitlines()[1:]:
         p = line.split(None, 3)
@@ -437,7 +417,7 @@ def _linux_collect(ssh) -> dict:
                 "pid": p[0], "name": p[1],
                 "cpu": p[2], "mem": p[3].strip()+"%"})
 
-    # ── Network ──────────────────────────────────────────────────────────
+    # ── Network
     raw = _run(ssh, "cat /proc/net/dev")
     for line in raw.splitlines()[2:]:
         line = line.strip()
@@ -471,7 +451,7 @@ def _linux_collect(ssh) -> dict:
             except Exception:
                 pass
 
-    # ── Jetson Orin NX via tegrastats ─────────────────────────────────────
+    # ── Jetson Orin NX via tegrastats 
     raw_teg = _run(ssh,
         "tegrastats --interval 500 --count 1 2>/dev/null | head -1",
         timeout=8)
@@ -493,9 +473,8 @@ def _linux_collect(ssh) -> dict:
     return d
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# 
 # Worker thread
-# ─────────────────────────────────────────────────────────────────────────────
 class MetricsWorker(QThread):
     done = pyqtSignal(dict)
 
@@ -518,9 +497,9 @@ class MetricsWorker(QThread):
             })
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Panel widget
-# ─────────────────────────────────────────────────────────────────────────────
+
 class DeviceMonitorPanel(QWidget):
 
     POLL_MS = 12000
@@ -704,8 +683,7 @@ class DeviceMonitorPanel(QWidget):
         t.setMaximumHeight(maxh)
         return t
 
-    # ── polling ───────────────────────────────────────────────────────────
-
+    # ── polling
     def start_polling(self):
         self._poll()
         self._timer.start(self.POLL_MS)
@@ -721,7 +699,7 @@ class DeviceMonitorPanel(QWidget):
         self._worker.done.connect(self._apply)
         self._worker.start()
 
-    # ── apply ─────────────────────────────────────────────────────────────
+    # ── apply 
 
     def _apply(self, data: dict):
         now = datetime.now()
@@ -834,7 +812,7 @@ class DeviceMonitorPanel(QWidget):
             self._jetson_pie_frame.hide()
             self._temp_frame.hide()
 
-        # ── Network speed ─────────────────────────────────────────────────
+        # ── Network speed 
         cur_bytes  = data.get("net_bytes", {})
         dt_secs    = (now - self._last_poll_ts).total_seconds() if self._last_poll_ts else 0
         net_speeds = {}
