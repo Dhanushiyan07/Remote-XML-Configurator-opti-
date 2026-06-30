@@ -2,9 +2,7 @@
 
 A desktop GUI tool for remotely editing XML configuration files on edge devices over SSH — with XSD-driven validation, live device health monitoring, and a full audit trail. Built primarily for the **NVIDIA Jetson Orin NX**, but works with any Windows or Linux machine reachable over SSH.
 
-!\[Python](https://img.shields.io/badge/Python-3.10%2B-blue)
-!\[PyQt5](https://img.shields.io/badge/GUI-PyQt5-green)
-!\[Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Jetson-orange)
+
 
 ## Overview
 
